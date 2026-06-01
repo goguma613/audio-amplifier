@@ -2,7 +2,7 @@
 // @name         🔊 브라우저 소리 증폭기 (Audio Amplifier)
 // @name:en      Audio Amplifier for Browser
 // @namespace    https://github.com/goguma613/audio-amplifier
-// @version      1.0.1
+// @version      1.0.2
 // @description  영상/오디오 소리를 최대 500%까지 증폭. 클리핑 방지 리미터, VU미터, 3밴드 EQ·음성 부스트, 사이트별 설정 기억.
 // @description:en  Amplify video/audio up to 500% with a clipping limiter, VU meter, 3-band EQ, voice-boost preset and per-site memory.
 // @author       goguma613
@@ -16,8 +16,7 @@
 // @match        *://*.chzzk.naver.com/*
 // @exclude      *://*.netflix.com/*
 // @exclude      *://*.disneyplus.com/*
-// @grant        GM_getValue
-// @grant        GM_setValue
+// @grant        none
 // @run-at       document-start
 // @updateURL    https://raw.githubusercontent.com/goguma613/audio-amplifier/main/audio-amplifier.user.js
 // @downloadURL  https://raw.githubusercontent.com/goguma613/audio-amplifier/main/audio-amplifier.user.js
@@ -77,15 +76,16 @@
   // ConfigManager — 사이트별 설정 저장/로드
   // ─────────────────────────────────────────────────────────────
   const ConfigManager = (function () {
-    const KEY = 'cfg:' + location.hostname;
+    // localStorage는 사이트(origin)별로 분리되어 자동으로 "사이트별 설정 기억"이 됨.
+    const KEY = '__audioAmp_cfg';
     let state = Object.assign({}, DEFAULTS);
     let saveTimer = null;
 
     function load() {
       try {
-        const raw = GM_getValue(KEY, null);
+        const raw = localStorage.getItem(KEY);
         if (raw) {
-          const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+          const parsed = JSON.parse(raw);
           state = Object.assign({}, DEFAULTS, parsed);
           state.eq = Object.assign({}, DEFAULTS.eq, parsed.eq || {});
         }
@@ -97,7 +97,7 @@
 
     function persist() {
       try {
-        GM_setValue(KEY, JSON.stringify(state));
+        localStorage.setItem(KEY, JSON.stringify(state));
       } catch (e) {
         console.warn('[증폭기] 설정 저장 실패:', e);
       }
