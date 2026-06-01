@@ -2,7 +2,7 @@
 // @name         🔊 브라우저 소리 증폭기 (Audio Amplifier)
 // @name:en      Audio Amplifier for Browser
 // @namespace    https://github.com/goguma613/audio-amplifier
-// @version      1.1.0
+// @version      1.1.1
 // @description  영상/오디오 소리를 최대 1000%까지 증폭. 소프트 클리퍼로 찢어짐 없이 크게, VU미터, 원클릭 사운드 모드(음성/음악/영화), 사이트별 설정 기억.
 // @description:en  Amplify video/audio up to 1000% with a soft-clip loudness maximizer, VU meter, one-click sound modes and per-site memory.
 // @author       goguma613
@@ -157,6 +157,8 @@
     const wired = new WeakSet();      // 이미 createMediaElementSource 호출한 element
     const nodesMap = new WeakMap();   // element → { gain, eqLow, eqMid, eqHigh, analyser, softClip, bypassed }
     const graphs = [];                // 현재 활성 그래프 목록(설정 일괄 적용용). 약참조 보관.
+    const pending = new Set();        // 컨텍스트가 켜지기 전까지 대기하는 element
+    let contextReady = false;         // AudioContext가 running 되어 연결 가능한 상태인지
 
     function ensureCtx() {
       if (!ctx) {
@@ -167,13 +169,35 @@
       return ctx;
     }
 
+    // 사용자 제스처 등에서 호출 — 컨텍스트를 켜고, running이 되면 대기 중인 element를 연결.
     function resume() {
-      if (ctx && ctx.state === 'suspended') {
-        ctx.resume().catch(() => {});
+      const context = ensureCtx();
+      if (!context) return;
+      if (context.state === 'running') { flushPending(); return; }
+      context.resume().then(() => {
+        if (context.state === 'running') flushPending();
+      }).catch(() => {});
+    }
+
+    function flushPending() {
+      contextReady = true;
+      if (pending.size) {
+        pending.forEach(wireNow);
+        pending.clear();
       }
     }
 
+    // 영상 감지 시 호출. 컨텍스트가 아직 안 켜졌으면 대기열에 넣어 "원음을 정상 재생"시킨다.
+    // (켜지기 전에 가로채면 무음이 되므로, 첫 제스처로 컨텍스트가 running 된 뒤 연결)
     function attach(el) {
+      if (wired.has(el) || pending.has(el)) return;
+      pending.add(el);
+      el.addEventListener('play', resume, { once: true }); // 재생 시작(보통 제스처 직후)에도 시도
+      resume(); // 이미 running이면 즉시 연결
+    }
+
+    // 실제 오디오 그래프 연결 (컨텍스트 running 상태에서만 호출)
+    function wireNow(el) {
       if (wired.has(el)) return;
       const context = ensureCtx();
       if (!context) return;
@@ -223,9 +247,8 @@
       // CORS 무음 감지: 잠시 후 소리 흐름이 전혀 없으면 바이패스로 폴백
       scheduleSilenceCheck(g);
 
-      // 현재 설정 적용
+      // 현재 설정 적용 (이 시점엔 컨텍스트가 이미 running)
       applyConfig(ConfigManager.get());
-      resume();
     }
 
     // 교차 출처(CORS) 미디어가 tainted 되어 무음이 되는 경우 폴백
@@ -662,10 +685,11 @@
   // ─────────────────────────────────────────────────────────────
   ConfigManager.load();
 
-  // 사용자 제스처에서 AudioContext resume (autoplay 정책)
+  // 사용자 제스처에서 AudioContext resume (autoplay 정책). 다양한 입력 + 탭 복귀 시 모두 시도.
   const resumeOnce = () => AudioEngine.resume();
-  window.addEventListener('pointerdown', resumeOnce, { passive: true });
-  window.addEventListener('keydown', resumeOnce, { passive: true });
+  ['pointerdown', 'keydown', 'click', 'touchstart'].forEach((ev) =>
+    window.addEventListener(ev, resumeOnce, { passive: true, capture: true }));
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) resumeOnce(); });
 
   let uiBuilt = false;
   function buildUIOnce() {
