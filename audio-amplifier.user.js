@@ -2,7 +2,7 @@
 // @name         🔊 브라우저 소리 증폭기 (Audio Amplifier)
 // @name:en      Audio Amplifier for Browser
 // @namespace    https://github.com/goguma613/audio-amplifier
-// @version      1.0.0
+// @version      1.0.1
 // @description  영상/오디오 소리를 최대 500%까지 증폭. 클리핑 방지 리미터, VU미터, 3밴드 EQ·음성 부스트, 사이트별 설정 기억.
 // @description:en  Amplify video/audio up to 500% with a clipping limiter, VU meter, 3-band EQ, voice-boost preset and per-site memory.
 // @author       goguma613
@@ -43,8 +43,14 @@
   'use strict';
 
   // 최상위 프레임에서만 UI 렌더(임베드 iframe 중복 방지). 오디오 엔진은 모든 프레임에서 동작.
+  // window.self===window.top 비교는 유저스크립트 샌드박스에서 어긋날 수 있어 frameElement로 판정.
   const IS_TOP = (function () {
-    try { return window.top === window.self; } catch (e) { return false; }
+    try {
+      if (window.frameElement) return false; // 같은 출처 서브프레임
+    } catch (e) {
+      return false;                          // 교차 출처 서브프레임(접근 시 예외)
+    }
+    return true;                             // 최상위 프레임
   })();
 
   // ─────────────────────────────────────────────────────────────
@@ -631,8 +637,24 @@
     if (uiBuilt || !IS_TOP) return;
     if (!document.body) { document.addEventListener('DOMContentLoaded', buildUIOnce, { once: true }); return; }
     uiBuilt = true;
-    UIManager.build();
+    try {
+      UIManager.build();
+      console.log('[증폭기] UI 표시 완료');
+    } catch (e) {
+      uiBuilt = false;
+      console.error('[증폭기] UI 생성 실패:', e);
+    }
   }
 
-  VideoObserver.start(buildUIOnce);
+  console.log('[증폭기] 스크립트 시작 — 최상위 프레임:', IS_TOP, '| URL:', location.href);
+
+  // 오디오 엔진은 영상 감지 시 연결
+  VideoObserver.start();
+
+  // UI는 영상 감지와 무관하게 항상 표시(여러 경로로 보장)
+  buildUIOnce();
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', buildUIOnce, { once: true });
+  }
+  window.addEventListener('load', buildUIOnce, { once: true });
 })();
