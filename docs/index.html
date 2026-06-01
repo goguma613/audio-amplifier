@@ -37,6 +37,14 @@
   .badge { display:inline-block; background:rgba(255,255,255,.08); border-radius:6px;
     padding:1px 8px; font-size:12px; margin:0 2px; }
   .warn { font-size: 12px; opacity:.7; margin-top: 6px; }
+  .step.key { background: rgba(255,184,79,.10); border: 1px solid rgba(255,184,79,.35); }
+  .step.key .num { background: #ffb84f; color: #1a1a1a; }
+  .method { background: rgba(0,0,0,.25); border-radius: 10px; padding: 10px 12px; margin-top: 8px; font-size: 13px; }
+  .method b { color: #ffd28a; }
+  .method ol { margin: 6px 0 0 18px; opacity: .85; }
+  .method li { margin: 3px 0; }
+  code { background: rgba(255,255,255,.12); border-radius: 5px; padding: 1px 6px; font-size: 12px; }
+  .or { text-align:center; font-size:11px; opacity:.5; margin:8px 0; }
 </style>
 </head>
 <body>
@@ -53,12 +61,36 @@
         <a class="btn" href="https://chromewebstore.google.com/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo" target="_blank" rel="noopener">Tampermonkey 설치 (추천)</a>
         <a class="btn" style="background:rgba(255,255,255,.12)" href="https://chromewebstore.google.com/detail/violentmonkey/jinjaccalgkegednnccohejagnlnfdag" target="_blank" rel="noopener">Violentmonkey (대안)</a>
         <p class="warn">🐳 Whale(네이버)도 위 링크로 설치돼요. (설정에서 "다른 스토어 확장 설치 허용"이 필요할 수 있어요)</p>
-        <p class="warn">⚙️ 최신 크롬/웨일에서는 확장이 동작하려면 <b>개발자 모드</b>를 한 번 켜야 해요. (<code>chrome://extensions</code> / <code>whale://extensions</code> 우측 상단 토글 — 안내가 뜨면 그대로 켜면 됩니다)</p>
+      </div>
+    </div>
+
+    <div class="step key">
+      <div class="num">2</div>
+      <div>
+        <h3>⚠️ 사용자 스크립트 허용 켜기 (꼭 필요!)</h3>
+        <p>최신 크롬/웨일에서는 이걸 안 켜면 스크립트가 <b>아예 실행되지 않아요.</b> 아래 둘 중 <b>하나만</b> 하면 됩니다. (한 번만 하면 계속 유지돼요)</p>
+
+        <div class="method">
+          <b>방법 A — 최신 크롬/엣지 (138+)</b>
+          <ol>
+            <li>Tampermonkey 아이콘 <b>우클릭</b> → <b>"확장 프로그램 관리"</b></li>
+            <li>상세 페이지에서 <b>"사용자 스크립트 허용"</b> 토글을 <b>켜기</b></li>
+          </ol>
+        </div>
+        <div class="or">— 또는 (위 토글이 안 보이면) —</div>
+        <div class="method">
+          <b>방법 B — 웨일 / 구버전 크롬</b>
+          <ol>
+            <li>주소창에 <code>chrome://extensions</code> (웨일은 <code>whale://extensions</code>) 입력</li>
+            <li>우측 상단 <b>"개발자 모드"</b> 토글 <b>켜기</b></li>
+          </ol>
+        </div>
+        <p class="warn">✅ 켠 뒤에는 <b>브라우저를 완전히 종료했다 다시 켜</b> 주세요. (창만 닫지 말고 완전 종료)</p>
       </div>
     </div>
 
     <div class="step">
-      <div class="num">2</div>
+      <div class="num">3</div>
       <div>
         <h3>증폭기 스크립트 설치</h3>
         <p>아래 버튼을 누르면 설치 화면이 떠요. <b>"설치"</b>만 누르면 끝!</p>
@@ -67,7 +99,7 @@
     </div>
 
     <p class="note">
-      설치 후 유튜브 영상에 가면 우측 상단에 🔊 패널이 나타나요.<br>
+      설치 후 유튜브 영상에 가면 우측 상단에 🔊 패널이 나타나요. (안 보이면 유튜브 탭을 새로 여세요)<br>
       지원: <span class="badge">YouTube</span><span class="badge">Twitch</span><span class="badge">네이버TV</span><span class="badge">치지직</span> 등 ·
       미지원: <span class="badge">Netflix</span>(DRM)
     </p>
