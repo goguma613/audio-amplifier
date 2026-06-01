@@ -1,7 +1,8 @@
 # 🔊 브라우저 소리 증폭기 (Audio Amplifier)
 
-영상/오디오 소리가 너무 작을 때, 브라우저에서 **최대 500%까지** 소리를 키워주는 Violentmonkey 유저스크립트입니다.
+영상/오디오 소리가 너무 작을 때, 브라우저에서 **최대 500%까지** 소리를 키워주는 유저스크립트입니다.
 브라우저·OS 볼륨의 100% 한계를 넘어 소프트웨어로 증폭합니다.
+(Tampermonkey · Violentmonkey 등 유저스크립트 매니저에서 동작)
 
 ## ✨ 기능
 
@@ -17,12 +18,18 @@
 
 > Chrome·Whale(네이버) 모두 동일하게 동작합니다. (둘 다 크롬 확장 호환)
 
-### 1단계 — Violentmonkey 확장 설치
-[크롬 웹스토어 → Violentmonkey](https://chromewebstore.google.com/detail/violentmonkey/jinjaccalgkegednnccohejagnlnfdag) 에서 **"Chrome에 추가"** 클릭
-- **Whale 사용자**: 웨일에서도 위 크롬 웹스토어 링크로 바로 설치됩니다. (설정 → 확장앱에서 "다른 스토어의 확장앱 설치 허용"이 필요할 수 있어요)
+### 1단계 — 유저스크립트 매니저 설치
+유저스크립트를 실행해주는 확장 프로그램이에요. **둘 중 아무거나** 설치하면 되고, 이 증폭기는 둘 다에서 똑같이 동작합니다.
+
+- **추천 → [Tampermonkey](https://chromewebstore.google.com/detail/tampermonkey/dhdgffkkebhmkfjojejmpbldmpobfkfo)** — 사용자가 가장 많고 최신 규격(Manifest V3) 대응이 안정적입니다.
+- 대안 → [Violentmonkey](https://chromewebstore.google.com/detail/violentmonkey/jinjaccalgkegednnccohejagnlnfdag) (오픈소스)
+
+크롬 웹스토어에서 **"Chrome에 추가"** 클릭. **Whale 사용자**도 위 링크로 바로 설치됩니다. (웨일 설정 → 확장앱에서 "다른 스토어의 확장앱 설치 허용"이 필요할 수 있어요)
+
+> ⚠️ **개발자 모드 안내**: 최신 크롬/웨일(Manifest V3)에서는 유저스크립트 매니저가 동작하려면 **개발자 모드**를 한 번 켜야 합니다(Tampermonkey·Violentmonkey 공통, 크롬 정책). 설치 후 확장이 안내해주는 대로 `chrome://extensions`(웨일은 `whale://extensions`) 우측 상단의 **개발자 모드** 토글을 켜주세요. 한 번만 하면 됩니다.
 
 ### 2단계 — 증폭기 스크립트 설치
-아래 링크를 클릭하면 Violentmonkey 설치 화면이 뜹니다. **"설치"** 버튼만 누르면 끝!
+아래 링크를 클릭하면 유저스크립트 설치 화면이 뜹니다. **"설치"** 버튼만 누르면 끝!
 
 👉 **[증폭기 설치하기](https://raw.githubusercontent.com/goguma613/audio-amplifier/main/audio-amplifier.user.js)**
 
@@ -47,7 +54,7 @@
 
 ## 🔄 자동 업데이트
 
-Violentmonkey가 주기적으로 새 버전을 확인해 자동으로 업데이트합니다. 별도 작업이 필요 없습니다.
+유저스크립트 매니저가 주기적으로 새 버전을 확인해 자동으로 업데이트합니다. 별도 작업이 필요 없습니다.
 
 ## 🛠 만든 사람을 위한 메모
 
