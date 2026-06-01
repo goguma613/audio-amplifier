@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🔊 브라우저 소리 증폭기 — 설치</title>
+<style>
+  :root { --blue:#4f9dff; --bg:#0f1218; --card:#171b24; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Malgun Gothic', -apple-system, system-ui, sans-serif;
+    background: radial-gradient(1200px 600px at 50% -10%, #1c2433, var(--bg));
+    color: #e9eef5; min-height: 100vh; display: flex; align-items: center;
+    justify-content: center; padding: 24px; line-height: 1.6;
+  }
+  .card {
+    width: 100%; max-width: 560px; background: var(--card);
+    border: 1px solid rgba(255,255,255,.08); border-radius: 20px;
+    padding: 40px 32px; box-shadow: 0 20px 60px rgba(0,0,0,.5);
+  }
+  .logo { font-size: 56px; text-align: center; }
+  h1 { font-size: 26px; text-align: center; margin: 8px 0 4px; }
+  .sub { text-align: center; opacity: .7; font-size: 14px; margin-bottom: 28px; }
+  .step { display: flex; gap: 16px; align-items: flex-start; padding: 18px;
+    background: rgba(255,255,255,.04); border-radius: 14px; margin-bottom: 14px; }
+  .num { flex: none; width: 32px; height: 32px; border-radius: 50%; background: var(--blue);
+    color: #fff; font-weight: 800; display: flex; align-items: center; justify-content: center; }
+  .step h3 { font-size: 16px; margin-bottom: 4px; }
+  .step p { font-size: 13px; opacity: .75; margin-bottom: 10px; }
+  .btn { display: inline-block; background: var(--blue); color: #fff; text-decoration: none;
+    padding: 10px 18px; border-radius: 10px; font-weight: 700; font-size: 14px;
+    transition: transform .1s, background .2s; }
+  .btn:hover { background: #3d8aef; transform: translateY(-1px); }
+  .btn.green { background: #3ddc84; color: #0f1218; }
+  .btn.green:hover { background: #2ec973; }
+  .note { font-size: 12px; opacity: .6; margin-top: 24px; text-align: center; }
+  .badge { display:inline-block; background:rgba(255,255,255,.08); border-radius:6px;
+    padding:1px 8px; font-size:12px; margin:0 2px; }
+  .warn { font-size: 12px; opacity:.7; margin-top: 6px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">🔊</div>
+    <h1>브라우저 소리 증폭기</h1>
+    <p class="sub">영상 소리를 최대 <b>500%</b>까지 키워보세요 · Chrome / Whale 지원</p>
+
+    <div class="step">
+      <div class="num">1</div>
+      <div>
+        <h3>Violentmonkey 확장 설치</h3>
+        <p>유저스크립트를 실행해주는 확장 프로그램이에요. 한 번만 설치하면 됩니다.</p>
+        <a class="btn" href="https://chromewebstore.google.com/detail/violentmonkey/jinjaccalgkegednnccohejagnlnfdag" target="_blank" rel="noopener">크롬 웹스토어에서 설치</a>
+        <p class="warn">🐳 Whale(네이버)도 위 링크로 설치돼요. (설정에서 "다른 스토어 확장 설치 허용"이 필요할 수 있어요)</p>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="num">2</div>
+      <div>
+        <h3>증폭기 스크립트 설치</h3>
+        <p>아래 버튼을 누르면 설치 화면이 떠요. <b>"설치"</b>만 누르면 끝!</p>
+        <a class="btn green" href="https://raw.githubusercontent.com/goguma613/audio-amplifier/main/audio-amplifier.user.js">증폭기 설치하기</a>
+      </div>
+    </div>
+
+    <p class="note">
+      설치 후 유튜브 영상에 가면 우측 상단에 🔊 패널이 나타나요.<br>
+      지원: <span class="badge">YouTube</span><span class="badge">Twitch</span><span class="badge">네이버TV</span><span class="badge">치지직</span> 등 ·
+      미지원: <span class="badge">Netflix</span>(DRM)
+    </p>
+  </div>
+</body>
+</html>
