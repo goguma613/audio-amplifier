@@ -2,9 +2,9 @@
 // @name         🔊 브라우저 소리 증폭기 (Audio Amplifier)
 // @name:en      Audio Amplifier for Browser
 // @namespace    https://github.com/goguma613/audio-amplifier
-// @version      1.0.2
-// @description  영상/오디오 소리를 최대 500%까지 증폭. 클리핑 방지 리미터, VU미터, 3밴드 EQ·음성 부스트, 사이트별 설정 기억.
-// @description:en  Amplify video/audio up to 500% with a clipping limiter, VU meter, 3-band EQ, voice-boost preset and per-site memory.
+// @version      1.1.0
+// @description  영상/오디오 소리를 최대 1000%까지 증폭. 소프트 클리퍼로 찢어짐 없이 크게, VU미터, 원클릭 사운드 모드(음성/음악/영화), 사이트별 설정 기억.
+// @description:en  Amplify video/audio up to 1000% with a soft-clip loudness maximizer, VU meter, one-click sound modes and per-site memory.
 // @author       goguma613
 // @match        *://*.youtube.com/*
 // @match        *://*.youtube-nocookie.com/*
@@ -34,8 +34,9 @@
  *   UIManager      - Shadow DOM 플로팅 패널, 드래그, VU미터 렌더링
  *
  * 오디오 그래프(중요 순서):
- *   source → gain → EQ(low/mid/high) → analyser → limiter → destination
- *   ※ analyser는 리미터 "앞"에 둬야 클리핑이 잡힘.
+ *   source → gain → EQ(low/mid/high) → analyser → softClip(WaveShaper) → destination
+ *   ※ 소프트 클리퍼가 0dBFS에서 부드럽게 잡아 "찢어짐" 없이 라우드니스를 최대화.
+ *   ※ analyser는 소프트 클리퍼 "앞"에서 드라이브(과증폭) 정도를 측정.
  */
 
 (function () {
@@ -55,22 +56,49 @@
   // ─────────────────────────────────────────────────────────────
   // 상수
   // ─────────────────────────────────────────────────────────────
-  const MAX_GAIN = 5.0;          // 500%
+  const MAX_GAIN = 10.0;         // 1000% (소프트 클리퍼가 0dBFS에서 잡아주므로 안전)
   const MIN_GAIN = 1.0;          // 100%
   const RAMP_TIME = 0.02;        // gain 램핑(초) — pop 방지
-  const CLIP_PEAK = 0.99;        // 피크 클리핑 임계
-  const CLIP_REDUCTION = -1.0;   // 리미터 작동 임계(dB)
+  const SOFT_KNEE = 0.8;         // 이 지점부터 부드럽게 새추레이션(0~1)
   const SAVE_DEBOUNCE = 300;     // 설정 저장 디바운스(ms)
 
   const DEFAULTS = {
     gain: 1.0,
-    eq: { low: 0, mid: 0, high: 0 }, // dB
-    voiceBoost: false,
+    mode: 'default',    // 사운드 모드: default | voice | music | movie
     enabled: true,
     uiPos: null,        // {x, y} — null이면 기본 위치
     collapsed: false,
     onboarded: false,
   };
+
+  // 원클릭 사운드 모드 → EQ(dB) 매핑 (전문 용어 대신 상황별 프리셋)
+  const MODES = {
+    default: { label: '🔊 기본', eq: { low: 0,  mid: 0, high: 0 } },
+    voice:   { label: '🎙 음성', eq: { low: -3, mid: 5, high: 3 } },
+    music:   { label: '🎵 음악', eq: { low: 4,  mid: 0, high: 3 } },
+    movie:   { label: '🎬 영화', eq: { low: 5,  mid: 2, high: 1 } },
+  };
+  const MODE_KEYS = ['default', 'voice', 'music', 'movie'];
+
+  // 소프트 클리퍼 곡선: |x|<=knee 구간은 투명(기울기 1), 이후 부드럽게 ±1.0에 도달(기울기 0).
+  // 게인을 크게 올려 입력이 1을 넘어도 0dBFS에서 매끄럽게 잡혀 "찢어짐" 없이 크게 들린다.
+  const SOFT_CURVE = (function makeSoftCurve(t) {
+    const n = 8192;
+    const curve = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const x = (i / (n - 1)) * 2 - 1; // -1 .. 1
+      const ax = Math.abs(x);
+      let y;
+      if (ax <= t) {
+        y = ax;
+      } else {
+        const p = (ax - t) / (1 - t);          // 0..1
+        y = t + (1 - t) * (-p * p * p + p * p + p); // 기울기 1→0, y는 t→1
+      }
+      curve[i] = Math.sign(x) * y;
+    }
+    return curve;
+  })(SOFT_KNEE);
 
   // ─────────────────────────────────────────────────────────────
   // ConfigManager — 사이트별 설정 저장/로드
@@ -87,7 +115,7 @@
         if (raw) {
           const parsed = JSON.parse(raw);
           state = Object.assign({}, DEFAULTS, parsed);
-          state.eq = Object.assign({}, DEFAULTS.eq, parsed.eq || {});
+          if (!MODES[state.mode]) state.mode = 'default';
         }
       } catch (e) {
         console.warn('[증폭기] 설정 로드 실패:', e);
@@ -116,7 +144,6 @@
     return {
       get: () => state,
       set(patch) { Object.assign(state, patch); save(); },
-      setEq(band, val) { state.eq[band] = val; save(); },
       saveNow,
       load,
     };
@@ -128,7 +155,7 @@
   const AudioEngine = (function () {
     let ctx = null;
     const wired = new WeakSet();      // 이미 createMediaElementSource 호출한 element
-    const nodesMap = new WeakMap();   // element → { gain, eqLow, eqMid, eqHigh, analyser, limiter, bypassed }
+    const nodesMap = new WeakMap();   // element → { gain, eqLow, eqMid, eqHigh, analyser, softClip, bypassed }
     const graphs = [];                // 현재 활성 그래프 목록(설정 일괄 적용용). 약참조 보관.
 
     function ensureCtx() {
@@ -167,7 +194,7 @@
       const eqMid = context.createBiquadFilter();
       const eqHigh = context.createBiquadFilter();
       const analyser = context.createAnalyser();
-      const limiter = context.createDynamicsCompressor();
+      const softClip = context.createWaveShaper();
 
       eqLow.type = 'lowshelf';   eqLow.frequency.value = 120;
       eqMid.type = 'peaking';    eqMid.frequency.value = 2500; eqMid.Q.value = 1.0;
@@ -176,23 +203,20 @@
       analyser.fftSize = 1024;
       analyser.smoothingTimeConstant = 0.6;
 
-      // 리미터(클리핑 방지)
-      limiter.threshold.value = -3;
-      limiter.knee.value = 0;
-      limiter.ratio.value = 20;
-      limiter.attack.value = 0.003;
-      limiter.release.value = 0.25;
+      // 소프트 클리퍼(라우드니스 최대화 + 0dBFS 보호). off면 applyConfig에서 curve=null로 투명 통과.
+      softClip.curve = SOFT_CURVE;
+      softClip.oversample = '4x';   // 새추레이션 시 에일리어싱 감소
 
-      // 연결: source → gain → eqLow → eqMid → eqHigh → analyser → limiter → destination
+      // 연결: source → gain → eq×3 → analyser(드라이브 측정) → softClip(마지막) → destination
       source.connect(gain);
       gain.connect(eqLow);
       eqLow.connect(eqMid);
       eqMid.connect(eqHigh);
       eqHigh.connect(analyser);
-      analyser.connect(limiter);
-      limiter.connect(context.destination);
+      analyser.connect(softClip);
+      softClip.connect(context.destination);
 
-      const g = { el, source, gain, eqLow, eqMid, eqHigh, analyser, limiter, bypassed: false };
+      const g = { el, source, gain, eqLow, eqMid, eqHigh, analyser, softClip, bypassed: false };
       nodesMap.set(el, g);
       graphs.push(g);
 
@@ -248,24 +272,23 @@
     function applyConfig(cfg) {
       if (!ctx) return;
       const now = ctx.currentTime;
-      const targetGain = cfg.enabled ? cfg.gain : 1.0;
-      const eq = cfg.voiceBoost
-        ? { low: Math.min(cfg.eq.low, -2), mid: Math.max(cfg.eq.mid, 5), high: Math.max(cfg.eq.high, 2) }
-        : cfg.eq;
+      const on = cfg.enabled;
+      const targetGain = on ? cfg.gain : 1.0;
+      const eq = (MODES[cfg.mode] || MODES.default).eq;
 
       for (const g of graphs) {
         if (g.bypassed) continue;
         g.gain.gain.setTargetAtTime(targetGain, now, RAMP_TIME);
-        g.eqLow.gain.setTargetAtTime(cfg.enabled ? eq.low : 0, now, RAMP_TIME);
-        g.eqMid.gain.setTargetAtTime(cfg.enabled ? eq.mid : 0, now, RAMP_TIME);
-        g.eqHigh.gain.setTargetAtTime(cfg.enabled ? eq.high : 0, now, RAMP_TIME);
+        g.eqLow.gain.setTargetAtTime(on ? eq.low : 0, now, RAMP_TIME);
+        g.eqMid.gain.setTargetAtTime(on ? eq.mid : 0, now, RAMP_TIME);
+        g.eqHigh.gain.setTargetAtTime(on ? eq.high : 0, now, RAMP_TIME);
+        g.softClip.curve = on ? SOFT_CURVE : null; // off면 원음 그대로 통과
       }
     }
 
-    // VU미터용: 모든 활성 그래프 중 최대 피크/리미터 감소량 반환
+    // VU미터용: 모든 활성 그래프 중 최대 드라이브 피크 반환(소프트 클리퍼 직전 측정)
     function readMeter() {
       let peak = 0;
-      let reduction = 0;
       for (const g of graphs) {
         if (g.bypassed) continue;
         const buf = g._buf || (g._buf = new Float32Array(g.analyser.fftSize));
@@ -274,9 +297,8 @@
           const a = Math.abs(buf[i]);
           if (a > peak) peak = a;
         }
-        if (g.limiter.reduction < reduction) reduction = g.limiter.reduction;
       }
-      return { peak, reduction };
+      return { peak };
     }
 
     function hasGraphs() { return graphs.length > 0; }
@@ -372,16 +394,15 @@
       .meter.clip { box-shadow: 0 0 0 1px #ff5b5b inset; animation: blink .4s steps(2) infinite; }
       @keyframes blink { 50% { opacity: .4; } }
       .section { border-top: 1px solid rgba(255,255,255,.07); padding-top: 10px; margin-top: 4px; }
-      .eqrow { display: flex; align-items: center; gap: 8px; font-size: 11px; margin: 2px 0; }
-      .eqrow label { width: 30px; opacity: .7; }
-      .eqrow input { flex: 1; margin: 4px 0; }
-      .btnrow { display: flex; gap: 6px; margin-top: 10px; }
+      .seclabel { font-size: 11px; opacity: .55; margin-bottom: 7px; }
+      .modegrid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
       .btn {
-        flex: 1; padding: 7px 0; border: none; border-radius: 8px; cursor: pointer;
+        padding: 8px 0; border: none; border-radius: 8px; cursor: pointer;
         background: rgba(255,255,255,.08); color: #e9eef5; font-size: 12px; font-weight: 600;
       }
       .btn:hover { background: rgba(255,255,255,.16); }
-      .btn.active { background: #ffb84f; color: #1a1a1a; }
+      .btn.active { background: #4f9dff; color: #fff; }
+      .btn.reset { width: 100%; margin-top: 8px; background: rgba(255,255,255,.05); opacity: .85; }
       .pill {
         display: none; align-items: center; gap: 6px; cursor: pointer;
         padding: 8px 12px; background: rgba(22,26,34,.92); backdrop-filter: blur(12px);
@@ -439,17 +460,20 @@
       const meterBar = el('div', { class: 'meterbar' });
       const meter = el('div', { class: 'meter' }, [meterBar]);
 
-      // EQ 섹션
-      const eqBands = [['low', '저음'], ['mid', '중음'], ['high', '고음']];
-      const eqInputs = {};
-      const eqRows = eqBands.map(([band, label]) => {
-        const input = el('input', { type: 'range', min: '-12', max: '12', step: '1', value: String(cfg.eq[band]) });
-        eqInputs[band] = input;
-        return el('div', { class: 'eqrow' }, [el('label', { text: label }), input]);
+      // 사운드 모드 버튼 (전문 EQ 대신 상황별 원클릭 프리셋)
+      const modeBtns = {};
+      const modeGrid = el('div', { class: 'modegrid' });
+      MODE_KEYS.forEach((key) => {
+        const b = el('button', { class: 'btn' + (cfg.mode === key ? ' active' : ''), title: MODES[key].label, text: MODES[key].label });
+        modeBtns[key] = b;
+        modeGrid.appendChild(b);
       });
-      const voiceBtn = el('button', { class: 'btn' + (cfg.voiceBoost ? ' active' : ''), text: '🎙 음성 부스트' });
-      const resetBtn = el('button', { class: 'btn', text: '↺ 100%' });
-      const section = el('div', { class: 'section' }, [...eqRows, el('div', { class: 'btnrow' }, [voiceBtn, resetBtn])]);
+      const resetBtn = el('button', { class: 'btn reset', text: '↺ 기본값으로 (100%)' });
+      const section = el('div', { class: 'section' }, [
+        el('div', { class: 'seclabel', text: '사운드 모드' }),
+        modeGrid,
+        resetBtn,
+      ]);
 
       panel = el('div', { class: 'panel' + (cfg.collapsed ? ' hidden' : '') }, [head, gainRow, slider, meter, section]);
 
@@ -462,7 +486,7 @@
       if (cfg.uiPos) { wrap.style.top = cfg.uiPos.y + 'px'; wrap.style.left = cfg.uiPos.x + 'px'; wrap.style.right = 'auto'; }
       shadow.appendChild(wrap);
 
-      els = { wrap, gainVal, slider, meterBar, meter, onBtn, collapseBtn, voiceBtn, resetBtn, eqInputs, pill, pillText, pillDot, titleEl };
+      els = { wrap, gainVal, slider, meterBar, meter, onBtn, collapseBtn, modeBtns, resetBtn, pill, pillText, pillDot, titleEl };
 
       bindEvents();
       mountToFullscreenOrBody();
@@ -505,31 +529,40 @@
       els.collapseBtn.addEventListener('click', () => setCollapsed(true));
       els.pill.addEventListener('click', () => setCollapsed(false));
 
-      els.voiceBtn.addEventListener('click', () => {
-        const next = !ConfigManager.get().voiceBoost;
-        ConfigManager.set({ voiceBoost: next });
-        els.voiceBtn.classList.toggle('active', next);
-        applyToEngine();
+      // 사운드 모드 버튼
+      MODE_KEYS.forEach((key) => {
+        els.modeBtns[key].addEventListener('click', () => {
+          ConfigManager.set({ mode: key });
+          for (const k of MODE_KEYS) els.modeBtns[k].classList.toggle('active', k === key);
+          applyToEngine();
+        });
       });
 
       els.resetBtn.addEventListener('click', () => {
-        ConfigManager.set({ gain: 1.0, eq: { low: 0, mid: 0, high: 0 }, voiceBoost: false });
+        ConfigManager.set({ gain: 1.0, mode: 'default' });
         els.slider.value = '100';
-        for (const b in els.eqInputs) els.eqInputs[b].value = '0';
-        els.voiceBtn.classList.remove('active');
+        for (const k of MODE_KEYS) els.modeBtns[k].classList.toggle('active', k === 'default');
         refreshGainLabel();
         applyToEngine();
       });
 
-      for (const band in els.eqInputs) {
-        els.eqInputs[band].addEventListener('input', () => {
-          ConfigManager.setEq(band, parseInt(els.eqInputs[band].value, 10));
-          applyToEngine();
-        });
-      }
+      // 마우스 휠로 볼륨 빠르게 조절 (패널/핀 위에서)
+      els.wrap.addEventListener('wheel', (e) => {
+        e.preventDefault();
+        adjustGain(e.deltaY < 0 ? 10 : -10);
+      }, { passive: false });
 
       // 드래그 이동
       makeDraggable(els.titleEl.parentElement, els.wrap);
+    }
+
+    function adjustGain(deltaPct) {
+      const cur = Math.round(ConfigManager.get().gain * 100);
+      const next = Math.min(MAX_GAIN * 100, Math.max(MIN_GAIN * 100, cur + deltaPct));
+      ConfigManager.set({ gain: next / 100 });
+      els.slider.value = String(next);
+      refreshGainLabel();
+      applyToEngine();
     }
 
     function setCollapsed(on) {
@@ -541,6 +574,8 @@
     function makeDraggable(handle, wrap) {
       let sx, sy, ox, oy, dragging = false;
       handle.addEventListener('pointerdown', (e) => {
+        // 버튼(켜기/끄기·접기 등) 위에서는 드래그를 시작하지 않음 → 클릭이 정상 동작
+        if (e.target.closest('button')) return;
         dragging = true;
         const r = wrap.getBoundingClientRect();
         sx = e.clientX; sy = e.clientY; ox = r.left; oy = r.top;
@@ -570,9 +605,9 @@
           els.meterBar.style.width = '0%';
           return;
         }
-        const { peak, reduction } = AudioEngine.readMeter();
+        const { peak } = AudioEngine.readMeter();
         els.meterBar.style.width = Math.min(100, peak * 100) + '%';
-        const clipping = peak >= CLIP_PEAK || reduction <= CLIP_REDUCTION;
+        const clipping = peak >= 1.0; // 소프트 클리퍼가 잡기 시작 = 최대 음압 근접
         els.meter.classList.toggle('clip', clipping);
         els.gainVal.classList.toggle('clip', clipping);
       }
@@ -608,7 +643,7 @@
       if (ConfigManager.get().onboarded) return;
       const close = el('button', { text: '알겠어요' });
       const tip = el('div', { class: 'tip' }, [
-        el('div', { text: '여기서 영상 소리를 최대 500%까지 키울 수 있어요! 슬라이더를 올려보세요.' }),
+        el('div', { text: '여기서 영상 소리를 최대 1000%까지 키울 수 있어요! 슬라이더를 올리거나 패널 위에서 마우스 휠을 굴려보세요.' }),
         close,
       ]);
       els.wrap.appendChild(tip);
